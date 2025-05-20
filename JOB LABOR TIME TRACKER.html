@@ -1,0 +1,288 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Job Labor Hour Tracker (Mobile Ready)</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 10px;
+      margin: 0;
+      background-color: #f9f9f9;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    label, input, select, button {
+      display: block;
+      width: 100%;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      font-size: 14px;
+      background-color: white;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px;
+      text-align: center;
+    }
+
+    thead {
+      background-color: #eee;
+    }
+
+    @media (max-width: 600px) {
+      table, thead, tbody, th, td, tr {
+        display: block;
+      }
+
+      th {
+        display: none;
+      }
+
+      td {
+        text-align: right;
+        padding-left: 50%;
+        position: relative;
+      }
+
+      td::before {
+        position: absolute;
+        left: 10px;
+        width: 45%;
+        white-space: nowrap;
+        text-align: left;
+        font-weight: bold;
+      }
+
+      td:nth-of-type(1)::before { content: "Date"; }
+      td:nth-of-type(2)::before { content: "Employee"; }
+      td:nth-of-type(3)::before { content: "Job"; }
+      td:nth-of-type(4)::before { content: "Start"; }
+      td:nth-of-type(5)::before { content: "End"; }
+      td:nth-of-type(6)::before { content: "Hours"; }
+      td:nth-of-type(7)::before { content: "Delete"; }
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Job Labor Hour Tracker</h2>
+
+  <label>Employee Name:
+    <select id="employeeDropdown">
+      <option value="">-- Select or Add --</option>
+    </select>
+    <input type="text" id="employeeName" placeholder="New Employee" oninput="syncDropdown()" />
+  </label>
+
+  <label>Job Name:
+    <input type="text" id="jobName" />
+  </label>
+
+  <button onclick="clockIn()">Clock In</button>
+  <button onclick="clockOut()">Clock Out</button>
+  <button onclick="completeJob()">Complete Job</button>
+  <button onclick="savePDF()">Save as PDF</button>
+  <button onclick="exportCSV()">Export CSV</button>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Employee</th>
+        <th>Job</th>
+        <th>Start</th>
+        <th>End</th>
+        <th>Hours</th>
+        <th>Delete</th>
+      </tr>
+    </thead>
+    <tbody id="logTableBody"></tbody>
+    <tfoot>
+      <tr>
+        <td colspan="5"><strong>Total Hours:</strong></td>
+        <td id="totalHoursCell"></td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <script>
+    let entries = [];
+
+    function getTimeNow() {
+      return new Date();
+    }
+
+    function formatTime(date) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatDate(date) {
+      return date.toLocaleDateString();
+    }
+
+    function syncDropdown() {
+      document.getElementById("employeeDropdown").value = "";
+    }
+
+    function getSelectedEmployee() {
+      const dropdownValue = document.getElementById("employeeDropdown").value;
+      const inputValue = document.getElementById("employeeName").value.trim();
+      return dropdownValue || inputValue;
+    }
+
+    function updateEmployeeDropdown(name) {
+      const dropdown = document.getElementById("employeeDropdown");
+      const exists = Array.from(dropdown.options).some(opt => opt.value.toLowerCase() === name.toLowerCase());
+      if (!exists) {
+        const option = document.createElement("option");
+        option.value = name;
+        option.text = name;
+        dropdown.appendChild(option);
+      }
+    }
+
+    function clockIn() {
+      const name = getSelectedEmployee();
+      const job = document.getElementById("jobName").value.trim();
+      const start = getTimeNow();
+
+      if (!name || !job) {
+        alert("Please enter both employee and job name.");
+        return;
+      }
+
+      entries.push({ name, job, start, end: null, hours: "" });
+      updateEmployeeDropdown(name);
+      document.getElementById("employeeName").value = "";
+      document.getElementById("employeeDropdown").value = "";
+      updateTable();
+    }
+
+    function clockOut() {
+      const name = getSelectedEmployee();
+      const now = getTimeNow();
+
+      if (!name) {
+        alert("Select or enter an employee name to clock out.");
+        return;
+      }
+
+      const entry = entries.find(e => e.name.toLowerCase() === name.toLowerCase() && !e.end);
+      if (!entry) {
+        alert("No active clock-in found for that employee.");
+        return;
+      }
+
+      const minutesWorked = (now - entry.start) / 60000;
+      if (minutesWorked < 5) {
+        alert("Time worked is less than 5 minutes. Clock-out canceled.");
+        return;
+      }
+
+      entry.end = now;
+      updateTable();
+    }
+
+    function completeJob() {
+      let total = 0;
+      entries.forEach(entry => {
+        if (entry.start && entry.end) {
+          const rawHours = (entry.end - entry.start) / 3600000;
+          const rounded = Math.round(rawHours * 4) / 4;
+          entry.hours = rounded.toFixed(2);
+          total += rounded;
+        }
+      });
+      updateTable();
+      const roundedTotal = Math.round(total * 4) / 4;
+      document.getElementById("totalHoursCell").innerText = roundedTotal.toFixed(2);
+      alert("Total hours for all employees: " + roundedTotal.toFixed(2));
+    }
+
+    function deleteEntry(index) {
+      entries.splice(index, 1);
+      updateTable();
+    }
+
+    function updateTable() {
+      const tbody = document.getElementById("logTableBody");
+      tbody.innerHTML = "";
+      let total = 0;
+
+      entries.forEach((entry, index) => {
+        if (entry.hours) total += parseFloat(entry.hours);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${formatDate(entry.start)}</td>
+          <td>${entry.name}</td>
+          <td>${entry.job}</td>
+          <td>${formatTime(entry.start)}</td>
+          <td>${entry.end ? formatTime(entry.end) : ""}</td>
+          <td>${entry.hours}</td>
+          <td><button onclick="deleteEntry(${index})">Delete</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById("totalHoursCell").innerText = total.toFixed(2);
+    }
+
+    function savePDF() {
+      window.print();
+    }
+
+    function exportCSV() {
+      if (entries.length === 0) {
+        alert("No data to export.");
+        return;
+      }
+
+      let csv = "Date,Employee,Job,Start,End,Total Hours\n";
+      entries.forEach(entry => {
+        const date = formatDate(entry.start);
+        const start = formatTime(entry.start);
+        const end = entry.end ? formatTime(entry.end) : "";
+        const hours = entry.hours || "";
+        csv += `"${date}","${entry.name}","${entry.job}","${start}","${end}","${hours}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "job_labor_hours.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  </script>
+
+</body>
+</html>
